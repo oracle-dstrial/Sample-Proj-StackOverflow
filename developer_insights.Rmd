@@ -1,0 +1,291 @@
+---
+title: "StackOverflow Survey Results"
+output:
+  html_document: default
+  html_notebook: default
+---
+```{r include=FALSE, cache=FALSE}
+library(stringr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(tidyr)
+library(caTools)
+library(caret)
+install.packages('gbm')
+```
+# Data
+
+This data comes from a yearly survey by StackOverflow.  It includes a number of different questions, both personal and professional, for the sites many different developers to field.  The `survey_results_public.csv` file contains users' answers to these questions.  The `survey_results_schema.csv` file contains the set of questions and the columns they map to in the `survey_results_public.csv` file.
+
+```{r, echo = FALSE}
+survey_df = read.csv(file='data/survey_results_public.csv', header=TRUE, sep=",")
+survey_questions = read.csv(file='data/survey_results_schema.csv', header=TRUE, sep=",")
+```
+
+# Insights
+
+Data Science is a growing field.  Many people, ranging from academic scientists, to developers, to business analysts, are increasingly joining the ranks of Data Science.  What insights can we gleam about Data Scientists from this survey?
+
+## How do Data Scientists compare to other Developers?
+
+First, let's create an index to get all full-time Data Scientists, and another index to get all full-time other Developers.
+
+```{r, echo = FALSE}
+fulltime_ds_idx = which(str_detect(survey_df$DeveloperType, "Data scientist") & str_detect(survey_df$EmploymentStatus, "Employed full-time"))
+
+fulltime_nonds_idx = which(!str_detect(survey_df$DeveloperType, "Data scientist") & str_detect(survey_df$EmploymentStatus, "Employed full-time"))
+```
+
+Are employed Data Scientists more or less satisfied by their jobs and careers than other Developers?
+
+```{r, echo = FALSE}
+print(survey_questions$Question[which(survey_questions$Column=='JobSeekingStatus')], max.levels=0)
+looking = sort(unique(na.omit(survey_df$JobSeekingStatus)))
+print(looking, max.levels=0)
+```
+
+Let's look at the proportion of Data Scientists looking for a job vs. other developers.
+```{r, echo = FALSE}
+ds_looking = mean(survey_df$JobSeekingStatus[fulltime_ds_idx] == looking[1], na.rm=TRUE)*100
+ds_not_looking = mean(survey_df$JobSeekingStatus[fulltime_ds_idx] == looking[2], na.rm=TRUE)*100
+ds_passive_looking = mean(survey_df$JobSeekingStatus[fulltime_ds_idx] == looking[3], na.rm=TRUE)*100
+
+non_ds_looking = mean(survey_df$JobSeekingStatus[fulltime_nonds_idx] == looking[1], na.rm=TRUE)*100
+non_ds_not_looking = mean(survey_df$JobSeekingStatus[fulltime_nonds_idx] == looking[2], na.rm=TRUE)*100
+non_ds_passive_looking = mean(survey_df$JobSeekingStatus[fulltime_nonds_idx] == looking[3], na.rm=TRUE)*100
+
+
+looking_diff = (ds_looking-non_ds_looking)
+not_looking_diff = (ds_not_looking - non_ds_not_looking)
+passive_looking_diff = (ds_passive_looking-non_ds_passive_looking)
+```
+
+```{r, echo = FALSE}
+
+
+ds_status = c('ds', 'ds', 'ds', 'non_ds', 'non_ds', 'non_ds')
+perc = rbind(ds_looking, ds_not_looking, ds_passive_looking, non_ds_looking, non_ds_not_looking, non_ds_passive_looking)
+looking_status = c('looking', 'not_looking', 'passive_looking', 'looking', 'not_looking', 'passive_looking')
+
+df_looking = data.frame(perc, ds_status, looking_status)
+
+
+
+plot1 = ggplot(data=df_looking[c(1,2,4,5),], aes(x=ds_status, y=perc, fill=looking_status)) +
+  geom_bar(stat="identity")+labs(title="Percent looking / not looking for jobs",
+        x ="Developer Type", y = "Percent") + 
+  scale_fill_brewer(palette="Paired")+
+  theme_minimal()
+
+
+difference = rbind(looking_diff, not_looking_diff, passive_looking_diff)
+looking_status_diff = c('looking', 'not_looking', 'passive_looking')
+df_looking_diff = data.frame(difference, looking_status_diff)
+
+plot2 = ggplot(data=df_looking_diff, aes(x=looking_status_diff, y=difference)) +
+  geom_bar(stat="identity")+labs(title="Difference in job search status",
+        x ="Job search status", y = "Percent difference \n (Data Scientists - Others)") + 
+  theme_minimal()
+
+
+grid.arrange(plot1, plot2, ncol=2)
+```
+
+It seems that a larger percentage of data scientists are looking for jobs, but is this because they are unsatisfied with their jobs?
+
+## Job and Career Satisfaction
+
+Let's look at how Data Scientists fare at career and job satisfaction.
+
+```{r, echo = FALSE}
+ds_career = mean(survey_df$CareerSatisfaction[fulltime_ds_idx], na.rm=TRUE)
+nonds_career = mean(survey_df$CareerSatisfaction[fulltime_nonds_idx], na.rm=TRUE)
+
+ds_job = mean(survey_df$JobSatisfaction[fulltime_ds_idx], na.rm=TRUE)
+nonds_job = mean(survey_df$JobSatisfaction[fulltime_nonds_idx], na.rm=TRUE)
+
+satisfaction = rbind(ds_career, nonds_career, ds_job, nonds_job)
+devtype = c('ds', 'nonds', 'ds', 'nonds')
+scoretype = c('career', 'career', 'job', 'job')
+
+df_job = data.frame(satisfaction, devtype, scoretype)
+
+plot1 = ggplot(data=df_job, aes(x=scoretype, y=satisfaction, fill=devtype)) +
+geom_bar(stat="identity", position=position_dodge())+labs(title="Job and career satisfaction",
+        x ="", y = "Satisfaction Rating \n (1-10)") + 
+  theme_minimal()
+
+
+difference = rbind(ds_career-nonds_career, ds_job-nonds_job)
+diff_type = c('career', 'job')
+df_job_diff = data.frame(difference, diff_type)
+
+plot2 = ggplot(data=df_job_diff, aes(x=diff_type, y=difference)) +
+  geom_bar(stat="identity")+labs(title="Job and career satisfaction difference",
+        x ="", y = "Satisfaction difference \n (Data Scientists - Others')") +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol=2)
+```
+
+It looks like data scientists are more satisfied, but also more adventureous in their job-seeking behaviors.  This could be because high market demand entices data scientists to look for new positions even though they may be satisfied in their current position.
+
+
+## Who pronounces 'Gif' correctly?
+
+As we should all know, the 'Gif' image format is pronounced with a hard G.  Are Data Scientists more or less likely to pronounce it correctly?
+
+```{r, echo = FALSE}
+print(survey_questions$Question[which(survey_questions$Column=='PronounceGIF')], max.levels=0)
+gif_pron = sort(unique(na.omit(survey_df$PronounceGIF)))
+print(gif_pron, max.levels=0)
+```
+
+#### Results:
+```{r, echo = FALSE}
+
+ds_hardG = mean(survey_df$PronounceGIF[fulltime_ds_idx] == gif_pron[3], na.rm=TRUE)*100
+nonds_hardG = mean(survey_df$PronounceGIF[fulltime_nonds_idx] == gif_pron[3], na.rm=TRUE)*100
+cat(paste("Correct 'Gif' pronunciation (hard G) by job\n",'Percent DS \t|\t non DS \t|\t Difference\n', format(ds_hardG, digits=3), '\t\t|\t', format(nonds_hardG, digits=3), '\t\t|\t', format(ds_hardG - nonds_hardG, digits=3)))
+```
+Data Scientists only fare slightly better than other developers in how they pronounce 'Gif', and the difference is likely not significant.  There's definitely room for improvement there.
+
+
+# A Simple Model
+
+Let's build a simple model to see if we can predict who is and who is not a Data Scientist.  There's a number of questions that may be useful, ranging from equipment requirements (processing big data may require more resources) to general insterests like problem solving.  Let's see how we fare by trying a few of these features with a GBM model.
+
+Let's select our features and make sure they are in the right data format.
+
+```{r, echo = FALSE}
+
+# Features to use in our model
+model_features = c("EquipmentSatisfiedMonitors", "EquipmentSatisfiedCPU", "EquipmentSatisfiedRAM", "EquipmentSatisfiedStorage", "EquipmentSatisfiedRW", "ProblemSolving", "BuildingThings", "LearningNewTech", "BoringDetails", "JobSecurity", "DiversityImportant", "AnnoyingUI", "FriendsDevelopers", "RightWrongWay", "UnderstandComputers", "SeriousWork", "InvestTimeTools", "WorkPayCare", "KinshipDevelopers", "ChallengeMyself", "CompetePeers", "ChangeWorld")
+
+features_df = survey_df[model_features]
+
+# These features all have the same categorical levels and they should be ordered as in a likert scale, let's set that up.
+model_features1 = c("ProblemSolving", "BuildingThings", "LearningNewTech", "BoringDetails", "JobSecurity", "DiversityImportant", "AnnoyingUI", "FriendsDevelopers", "RightWrongWay", "UnderstandComputers", "SeriousWork", "InvestTimeTools", "WorkPayCare", "KinshipDevelopers", "ChallengeMyself", "CompetePeers", "ChangeWorld")
+levels = c('Strongly disagree', 'Disagree', 'Somewhat agree', 'Agree', 'Strongly agree')
+features_df[model_features1] <- catcolwise( function(v) ordered(v, levels = levels))(features_df[model_features1])
+
+
+# These features all have the same categorical levels and they should be ordered as in a likert scale, let's set that up.
+model_features2 = c("EquipmentSatisfiedMonitors", "EquipmentSatisfiedCPU", "EquipmentSatisfiedRAM", "EquipmentSatisfiedStorage", "EquipmentSatisfiedRW")
+levels = c('Not at all satisfied', 'Not very satisfied', 'Somewhat satisfied', 'Satisfied', 'Very satisfied')
+features_df[model_features2] <- catcolwise( function(v) ordered(v, levels = levels))(features_df[model_features2])
+
+ds_idx = str_detect(survey_df$DeveloperType, "Data scientist")
+features_df['is_ds'] = as.factor(ifelse(as.integer(ds_idx)==1, 'DS','NonDS'))
+
+features_df = features_df %>% drop_na(is_ds)
+
+# Let's do a train - test split
+set.seed(10) 
+sample = sample.split(features_df$is_ds, SplitRatio = .75)
+train = subset(features_df, sample == TRUE)
+test  = subset(features_df, sample == FALSE)
+``` 
+
+Here we use class weights to deal with our class imbalance problem.  This will hurt our classifier performance since it won't be able to benefit by always guessing the majority class, but it will also drive the model to actually use our features rather than just using the class proportions when making predictions.
+```{r, echo = FALSE}
+
+# Because we have a class imbalance problem, let's use class weights to deal with it
+f0 = sum(as.numeric(train$is_ds=='DS'))
+f1 = sum(as.numeric(train$is_ds=='NonDS'))
+w0 = 1/(f0/(f0+f1))
+w1 = 1/(f1/(f0+f1))
+
+class_weights <- ifelse(train$is_ds == 'DS', w0, w1)
+```
+
+Here we set the model's hyperparameters and train the GBM.  
+```{r, echo = FALSE}
+
+# Let's train our model
+gbmGrid <-  expand.grid(interaction.depth = 1,
+                    n.trees = 200,
+                    shrinkage = 0.1,
+                    n.minobsinnode = 10)
+# Set up control function for training
+
+ctrl <- trainControl(method = "none",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+# Build a standard classifier using a gradient boosted machine
+
+
+gbm_fit <- train(is_ds ~ .,
+                  data = train,
+                  weights = class_weights,
+                  method = "gbm",
+                  verbose = TRUE,
+                  metric = "ROC",
+                  na.action = na.pass,
+                  tuneGrid = gbmGrid,
+                  trControl = ctrl)
+```
+
+Let's look at our predictions in the test set to see how the model performs.
+
+```{r, echo = FALSE}
+preds = predict(gbm_fit, test, type='prob', na.action = NULL)
+pred_class = preds$DS
+pred_class[preds$DS > 0.5] = 'DS'
+pred_class[preds$DS <= 0.5] = 'NonDS'
+
+```
+
+```{r, echo = FALSE}
+print('Percent Correct:')
+sum(pred_class==test$is_ds) / length(pred_class)*100
+
+```
+
+Not great, just barely above chance.  We have some signal there but not very much. 
+
+Let's see what the ROC curve for this looks like.
+```{r, echo = FALSE}
+
+fa_vec = vector()
+hit_vec = vector()
+for (p in seq(0, 1, 0.05)) {
+  pred_tmp = preds$DS
+  pred_tmp[preds$DS > p] = 'DS'
+  pred_tmp[preds$DS <= p] = 'NonDS'
+  
+  pred_pos_idx = (pred_tmp=='DS')
+  act_pos_idx = (test$is_ds=='DS')
+  act_neg_idx = (test$is_ds!='DS')
+  
+  hits = sum(pred_tmp[act_pos_idx]=='DS') / sum(act_pos_idx)
+  fas = sum(pred_tmp[act_neg_idx]=='DS') / sum(act_neg_idx)
+  
+  fa_vec = c(fa_vec, fas)
+  hit_vec = c(hit_vec, hits)
+  
+}
+```
+
+
+
+```{r, echo = FALSE}
+
+plot(fa_vec, hit_vec,type="l",col="red", main='ROC Curve', xlab='False Alarms (fpr)', ylab = 'Hits (tpr)')
+lines(c(0,1),c(0,1),col="black")
+legend("bottomright", 
+  legend = c("Model", "Chance"), 
+  col = c("red", "black"),
+  lty = c(1,1),
+  bty = "n", 
+  pt.cex = 2, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F , 
+  inset = c(0.1, 0.1))
+```
+
+Not particularly impressive, but a tad above random guessing.   We didn't do any feature selection / engineering, or a hyperparameter search, or try different models.  We may also want to try to undersample our majority class rather than using class weights.  All of these methods could help us improve our performance.
